@@ -1,5 +1,6 @@
 // The meters line of the terminal statusline (~/.claude/statusline.sh), for the band above the prompt
 // in the Desktop app: context, 5-hour and 7-day usage, each drawn as an SVG gauge beside its value.
+// An app attached to a cloud session never asks for the band, so /meter also prints the line as text.
 
 // The meter pattern in use: options.pattern at load, then each /config change
 let selected = 'bar';
@@ -7,6 +8,8 @@ let context = null;
 let rateLimits = [];
 // The redraw timer, kept so a re-fired session.start can stop it
 let ticker = null;
+// How many times each surface asked for the band, for /meter debug
+const asks = {};
 
 // How often to redraw, so the reset markers move on and a passed reset shows 0%
 const TICK_MS = 60_000;
@@ -50,7 +53,8 @@ const PATTERNS = {
 };
 
 export function register(on, options) {
-  selected = options.pattern;
+  // An unset or unknown option falls back to the default pattern
+  if (options.pattern in PATTERNS) selected = options.pattern;
 
   // Fires again on an enable or a worker respawn, which may keep this module's variables
   on('session.start', async ($, e, next) => {
@@ -105,20 +109,30 @@ export function register(on, options) {
   // user switches
   on('command.run', { command: 'meter' }, async ($, e) => {
     const name = e.args.trim();
+    // Which surfaces the session draws on and which of them asked for the band, to tell an app that
+    // never asks from one that asks and does not show it
+    if (name === 'debug') {
+      const surfaces = await $.session.surfaces();
+      return { text: 'Surfaces: ' + JSON.stringify(surfaces) + ', band asks: ' + JSON.stringify(asks) };
+    }
     if (!(name in PATTERNS)) {
-      return { text: 'Patterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
+      const line = textLine(await $.clock.now());
+      return { text: line + '\nPatterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
     }
     await choose($, name);
     return { text: 'Meter pattern: ' + name };
   });
 
-  // The terminal keeps its own statusLine, so only the Desktop app gets this band
+  // The terminal keeps its own statusLine, so only the app surfaces get this band. Only an app that
+  // runs the session itself (Desktop's Local sessions) asks for it; one attached to a cloud session
+  // sends no ui_render, so this hook never runs there and /meter is the way to see the figures
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.surface !== 'desktop') return next(e);
+    asks[e.surface] = (asks[e.surface] ?? 0) + 1;
+    if (e.surface === 'terminal') return next(e);
     const elements = $.ui.resolve(e);
     const { Box, Text } = elements;
     const now = await $.clock.now();
-    const meters = [contextMeter(), ...LIMITS.map((limit) => limitMeter(limit, now))];
+    const meters = allMeters(now);
     // The statusline's dim separator between meters
     const children = meters.flatMap((m, i) => [
       ...(i === 0 ? [] : [Text({ dimColor: true, children: ['│'] })]),
@@ -136,6 +150,32 @@ async function choose($, name) {
   selected = name;
   await $.store.set(PATTERN_KEY, name);
   $.ui.invalidate('ui.render');
+}
+
+function allMeters(now) {
+  return [contextMeter(), ...LIMITS.map((limit) => limitMeter(limit, now))];
+}
+
+// The band as one line of text, for an app that does not draw the band: a ten-cell block bar per meter
+function textLine(now) {
+  return allMeters(now)
+    .map(({ label, used, marker }) => {
+      const known = typeof used === 'number';
+      const parts = [label, textBar(known ? used : 0), known ? Math.round(used) + '%' : '—'];
+      if (marker) parts.push(marker);
+      return parts.join(' ');
+    })
+    .join(' │ ');
+}
+
+// Eighths of a cell, so the last lit cell fills in part as the SVG bar's does
+const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
+
+function textBar(used) {
+  const eighths = Math.round(Math.min(Math.max(used, 0), 100) * 0.8);
+  const full = Math.floor(eighths / 8);
+  const part = EIGHTHS[eighths % 8];
+  return '█'.repeat(full) + part + '░'.repeat(10 - full - (part ? 1 : 0));
 }
 
 function contextMeter() {
