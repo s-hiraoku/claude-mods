@@ -29,20 +29,50 @@ ctx 200k [ゲージ] 20% │ 5h [ゲージ] 43% ↻09:05 │ 7d [ゲージ] 5% �
 | `bar` | 10 マスのバー。端数は最後のマスを途中まで塗る |
 | `braille` | 点字のような 2×4 の点を 4 マス並べ、使用率の分だけ左下から点灯する |
 
-### 切り替え方
+## 使い方
 
-`/config` の「Meter pattern」の行で選ぶか、`/plugin configure` で status-meter の設定を開きます。
-`/config` で変えると、開いているセッションのメーターもすぐに切り替わります。
-
-## インストール
+### インストール
 
 Claude Code のプロンプトで実行します。マーケットプレイスを登録済みなら 1 行目は不要です。
+登録済みでも、status-meter が追加される前に登録した場合は先に `/plugin marketplace update sym-synergy` を実行してください。
 
 ```text
 /plugin marketplace add sym-synergy/team-messaging
 /plugin install status-meter@sym-synergy
-/reload-plugins
 ```
+
+インストールしたら Desktop アプリを再起動します。
+
+### 表示する
+
+1. Desktop アプリの Code タブで、Local 環境の新しいセッションを開きます
+2. 何か 1 つメッセージを送ります
+3. 入力欄の上にメーターの行が出ます
+
+最初のメッセージを送るまでは、帯が出ないことがあります。
+
+### パターンを切り替える
+
+Desktop アプリでは、プロンプトで `/meter` にパターン名を付けて実行します。
+
+```text
+/meter bar
+```
+
+開いているセッションのメーターがすぐに切り替わり、設定に保存されるので、次のセッションでも同じパターンになります。
+`/meter` だけを実行すると、選べるパターンと今のパターンを表示します。
+
+Desktop アプリで `/config` を開くと、アプリ自体の設定画面が開き、この mod の設定はありません。
+ターミナルの Claude Code では、`/config` の「Meter pattern」の行でも切り替えられます。
+
+### 更新する
+
+```text
+/plugin marketplace update sym-synergy
+/plugin update status-meter@sym-synergy
+```
+
+更新は Desktop アプリの再起動後に反映されます。
 
 ## 制約
 

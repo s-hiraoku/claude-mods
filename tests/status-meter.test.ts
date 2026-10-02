@@ -32,10 +32,12 @@ const LIMITS: SessionRateLimit[] = [
 const CONTEXT: SessionContextUsage = { tokens: 40_000, window: 200_000, percent: 20 };
 
 type On = Parameters<typeof mock.clock>[0];
+const PRESENTATION = { isFullscreen: false, columns: 100 } as const;
 
 function stubSession(on: On, rateLimits = LIMITS, context = () => CONTEXT) {
   on('session.usage', () => ({ value: { startedAt: NOW, context: context(), rateLimits } }));
   on('session.start', () => ({ cwd: '/work' }));
+  on('command.register', ($, e) => ({ value: { command: e.name } }));
   // What the mods after this one draw in the band
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by another mod'] }));
 }
@@ -115,6 +117,28 @@ test('/config switches the pattern live, unless the change was denied', async ($
   deny = true;
   await change('status-meter.pattern', 'dots');
   expect(await widths()).toEqual([30, 30, 30]);
+});
+
+test('/meter switches and saves the pattern, and lists the patterns for anything else', async ($, on) => {
+  mock.clock(on, { now: NOW });
+  stubSession(on);
+  const saved: unknown[] = [];
+  on('config.set', ($, e) => {
+    saved.push([e.key, e.value]);
+    return { value: e.value };
+  });
+  await $.session.start(START);
+  const ui = await $.ui.mount(DESKTOP);
+  const widths = async () => (await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.width);
+
+  const answer = await $.command.run({ command: 'meter', args: ' bar ', origin: { kind: 'composer' }, presentation: PRESENTATION });
+  expect(answer.text).toBe('Meter pattern: bar');
+  expect(saved).toEqual([['status-meter.pattern', 'bar']]);
+  expect(await widths()).toEqual([59, 59, 59]);
+
+  const list = await $.command.run({ command: 'meter', args: 'pie', origin: { kind: 'composer' }, presentation: PRESENTATION });
+  expect(list.text).toBe('Patterns: ring, dots, sparkline, bar, braille (now: bar)');
+  expect(saved).toHaveLength(1);
 });
 
 test('a window past its reset shows 0% and drops its marker', async ($, on) => {

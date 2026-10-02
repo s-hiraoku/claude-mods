@@ -53,6 +53,11 @@ export function register(on, options) {
   // Fires again on an enable or a worker respawn, which may keep this module's variables
   on('session.start', async ($, e, next) => {
     ticker?.cancel();
+    await $.command.register({
+      name: 'meter',
+      description: 'Switch the meter pattern (ring, dots, sparkline, bar or braille)',
+      argumentHint: '<pattern>',
+    });
     const usage = await $.session.usage();
     context = usage.context;
     rateLimits = usage.rateLimits;
@@ -85,6 +90,21 @@ export function register(on, options) {
       $.ui.invalidate('ui.render');
     }
     return result;
+  });
+
+  // The Desktop app's /config opens the app's own settings, not this row, so /meter is how a
+  // Desktop user switches. A plugin's own $.config.set skips its own config.set hook, hence the
+  // assignment here.
+  on('command.run', { command: 'meter' }, async ($, e) => {
+    const name = e.args.trim();
+    if (!(name in PATTERNS)) {
+      return { text: 'Patterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
+    }
+    const result = await $.config.set({ key: 'status-meter.pattern', value: name });
+    if (result.deny !== undefined) return { text: 'Not switched: ' + result.deny };
+    selected = name;
+    $.ui.invalidate('ui.render');
+    return { text: 'Meter pattern: ' + name };
   });
 
   // The terminal keeps its own statusLine, so only the Desktop app gets this band
