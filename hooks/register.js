@@ -10,6 +10,8 @@ let ticker = null;
 
 // How often to redraw, so the reset markers move on and a passed reset shows 0%
 const TICK_MS = 60_000;
+// The pattern last chosen with /meter or /config, which wins over options.pattern
+const PATTERN_KEY = 'pattern';
 const DAY_MS = 24 * 3_600_000;
 const LIMITS = [
   { kind: 'five_hour', name: '5h' },
@@ -58,6 +60,8 @@ export function register(on, options) {
       description: 'Switch the meter pattern (ring, dots, sparkline, bar or braille)',
       argumentHint: '<pattern>',
     });
+    const saved = await $.store.get(PATTERN_KEY);
+    if (saved in PATTERNS) selected = saved;
     const usage = await $.session.usage();
     context = usage.context;
     rateLimits = usage.rateLimits;
@@ -85,25 +89,19 @@ export function register(on, options) {
   // Switches the pattern live; a change another hook denied leaves the drawing as it was
   on('config.set', { key: 'status-meter.pattern' }, async ($, e, next) => {
     const result = await next(e);
-    if (result.deny === undefined) {
-      selected = result.value;
-      $.ui.invalidate('ui.render');
-    }
+    if (result.deny === undefined) await choose($, result.value);
     return result;
   });
 
-  // The Desktop app's /config opens the app's own settings, not this row, so /meter is how a
-  // Desktop user switches. A plugin's own $.config.set skips its own config.set hook, hence the
-  // assignment here.
+  // The Desktop app's /config opens the app's own settings, not this row, and a mod has no
+  // /config row of its own to set ($.config.set refuses the key), so /meter is how a Desktop
+  // user switches
   on('command.run', { command: 'meter' }, async ($, e) => {
     const name = e.args.trim();
     if (!(name in PATTERNS)) {
       return { text: 'Patterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
     }
-    const result = await $.config.set({ key: 'status-meter.pattern', value: name });
-    if (result.deny !== undefined) return { text: 'Not switched: ' + result.deny };
-    selected = name;
-    $.ui.invalidate('ui.render');
+    await choose($, name);
     return { text: 'Meter pattern: ' + name };
   });
 
@@ -124,6 +122,13 @@ export function register(on, options) {
     const rest = await next(e);
     return rest ? Box({ flexDirection: 'column', children: [line, rest] }) : line;
   });
+}
+
+// Saved in $.store, which every session on the machine shares, so the next session starts with it
+async function choose($, name) {
+  selected = name;
+  await $.store.set(PATTERN_KEY, name);
+  $.ui.invalidate('ui.render');
 }
 
 function contextMeter() {

@@ -34,7 +34,12 @@ const CONTEXT: SessionContextUsage = { tokens: 40_000, window: 200_000, percent:
 type On = Parameters<typeof mock.clock>[0];
 const PRESENTATION = { isFullscreen: false, columns: 100 } as const;
 
-function stubSession(on: On, rateLimits = LIMITS, context = () => CONTEXT) {
+function stubSession(on: On, rateLimits = LIMITS, context = () => CONTEXT, store = new Map<string, unknown>()) {
+  on('store.get', ($, e) => ({ value: store.get(e.key) }));
+  on('store.set', ($, e) => {
+    store.set(e.key, e.value);
+    return { value: undefined };
+  });
   on('session.usage', () => ({ value: { startedAt: NOW, context: context(), rateLimits } }));
   on('session.start', () => ({ cwd: '/work' }));
   on('command.register', ($, e) => ({ value: { command: e.name } }));
@@ -119,26 +124,29 @@ test('/config switches the pattern live, unless the change was denied', async ($
   expect(await widths()).toEqual([30, 30, 30]);
 });
 
-test('/meter switches and saves the pattern, and lists the patterns for anything else', async ($, on) => {
+test('/meter switches the pattern, the next session starts with it, and anything else lists them', async ($, on) => {
   mock.clock(on, { now: NOW });
-  stubSession(on);
-  const saved: unknown[] = [];
-  on('config.set', ($, e) => {
-    saved.push([e.key, e.value]);
-    return { value: e.value };
-  });
+  const store = new Map<string, unknown>();
+  stubSession(on, LIMITS, () => CONTEXT, store);
   await $.session.start(START);
   const ui = await $.ui.mount(DESKTOP);
   const widths = async () => (await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.width);
+  const meter = (args: string) => $.command.run({ command: 'meter', args, origin: { kind: 'composer' }, presentation: PRESENTATION });
 
-  const answer = await $.command.run({ command: 'meter', args: ' bar ', origin: { kind: 'composer' }, presentation: PRESENTATION });
-  expect(answer.text).toBe('Meter pattern: bar');
-  expect(saved).toEqual([['status-meter.pattern', 'bar']]);
+  expect((await meter(' bar ')).text).toBe('Meter pattern: bar');
   expect(await widths()).toEqual([59, 59, 59]);
+  expect(store.get('pattern')).toBe('bar');
 
-  const list = await $.command.run({ command: 'meter', args: 'pie', origin: { kind: 'composer' }, presentation: PRESENTATION });
-  expect(list.text).toBe('Patterns: ring, dots, sparkline, bar, braille (now: bar)');
-  expect(saved).toHaveLength(1);
+  expect((await meter('pie')).text).toBe('Patterns: ring, dots, sparkline, bar, braille (now: bar)');
+  expect(store.get('pattern')).toBe('bar');
+});
+
+test('a session starts with the pattern saved in the store over options.pattern', { options: { pattern: 'dots' } }, async ($, on) => {
+  mock.clock(on, { now: NOW });
+  stubSession(on, LIMITS, () => CONTEXT, new Map([['pattern', 'braille']]));
+  await $.session.start(START);
+  const ui = await $.ui.mount(DESKTOP);
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.width)).toEqual([30, 30, 30]);
 });
 
 test('a window past its reset shows 0% and drops its marker', async ($, on) => {
