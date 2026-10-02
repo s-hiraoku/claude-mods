@@ -189,6 +189,23 @@ test('before the first reading the limits show a dash on an empty gauge', async 
   expect(await ui.find({ type: 'Text', text: '—' })).toMatchObject({ props: { dimColor: true } });
 });
 
+test('limits that arrive without a rateLimits change, or only in usage(), still show', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW });
+  const reported: SessionRateLimit[] = [];
+  stubSession(on, reported);
+  on('session.measure', ($, e) => ({ changed: e.changed }));
+  await $.session.start(START);
+  const ui = await $.ui.mount(DESKTOP);
+  const alts = async () => (await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt);
+
+  await $.session.measure({ context: CONTEXT, rateLimits: LIMITS, changed: ['context'] });
+  expect(await alts()).toEqual(['ctx 200k 20%', '5h 43%', '7d 5%']);
+
+  reported.push({ ...LIMITS[0]!, percentUsed: 60 }, LIMITS[1]!);
+  await clock.advance(60_000);
+  expect(await alts()).toEqual(['ctx 200k 20%', '5h 60%', '7d 5%']);
+});
+
 test('/clear shows the emptied context before the next turn', async ($, on) => {
   mock.clock(on, { now: NOW });
   let cleared = false;

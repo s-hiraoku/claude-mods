@@ -65,7 +65,13 @@ export function register(on, options) {
     const usage = await $.session.usage();
     context = usage.context;
     rateLimits = usage.rateLimits;
-    ticker = $.clock.every(TICK_MS, () => $.ui.invalidate('ui.render'));
+    // A session can start before any response reported the limits, and a later response need
+    // not raise session.measure for them, so each tick reads them again
+    ticker = $.clock.every(TICK_MS, async () => {
+      const latest = (await $.session.usage()).rateLimits;
+      if (latest.length > 0) rateLimits = latest;
+      $.ui.invalidate('ui.render');
+    });
     $.ui.invalidate('ui.render');
     return next(e);
   });
@@ -81,7 +87,8 @@ export function register(on, options) {
   // Fires after each turn, and when a rate-limit window moves a whole point
   on('session.measure', async ($, e, next) => {
     context = e.context;
-    if (e.changed.includes('rateLimits')) rateLimits = e.rateLimits;
+    // e.rateLimits is always the latest reading; changed alone marks a window that went away
+    if (e.rateLimits.length > 0 || e.changed.includes('rateLimits')) rateLimits = e.rateLimits;
     $.ui.invalidate('ui.render');
     return next(e);
   });
