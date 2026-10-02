@@ -206,6 +206,47 @@ test('limits that arrive without a rateLimits change, or only in usage(), still 
   expect(await alts()).toEqual(['ctx 200k 20%', '5h 60%', '7d 5%']);
 });
 
+test('a session with no reading yet shows the limits another session shared', async ($, on) => {
+  mock.clock(on, { now: NOW });
+  stubSession(on, [], () => CONTEXT, new Map([['rateLimits', { at: NOW - 60_000, limits: LIMITS }]]));
+  await $.session.start(START);
+
+  const ui = await $.ui.mount(DESKTOP);
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual(['ctx 200k 20%', '5h 43%', '7d 5%']);
+});
+
+test('a new reading is shared, and a tick takes up a newer one another session shared', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW });
+  const store = new Map<string, unknown>();
+  stubSession(on, [], () => CONTEXT, store);
+  on('session.measure', ($, e) => ({ changed: e.changed }));
+  await $.session.start(START);
+  const ui = await $.ui.mount(DESKTOP);
+  const alts = async () => (await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt);
+
+  await $.session.measure({ context: CONTEXT, rateLimits: LIMITS, changed: ['rateLimits'] });
+  expect(store.get('rateLimits')).toEqual({ at: NOW, limits: LIMITS });
+
+  const other = [{ ...LIMITS[0]!, percentUsed: 70 }, { ...LIMITS[1]!, percentUsed: 9 }];
+  store.set('rateLimits', { at: NOW + 30_000, limits: other });
+  await clock.advance(60_000);
+  expect(await alts()).toEqual(['ctx 200k 20%', '5h 70%', '7d 9%']);
+});
+
+test('a resumed session shows the shared reading over its own old one, and leaves it in place', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW });
+  const old = [{ ...LIMITS[0]!, percentUsed: 10 }, { ...LIMITS[1]!, percentUsed: 1 }];
+  const shared = { at: NOW - 60_000, limits: LIMITS };
+  const store = new Map<string, unknown>([['rateLimits', shared]]);
+  stubSession(on, old, () => CONTEXT, store);
+  await $.session.start(START);
+  const ui = await $.ui.mount(DESKTOP);
+
+  await clock.advance(60_000);
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual(['ctx 200k 20%', '5h 43%', '7d 5%']);
+  expect(store.get('rateLimits')).toBe(shared);
+});
+
 test('/clear shows the emptied context before the next turn', async ($, on) => {
   mock.clock(on, { now: NOW });
   let cleared = false;

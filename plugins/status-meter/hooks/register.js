@@ -1,10 +1,13 @@
 // The meters line of the terminal statusline (~/.claude/statusline.sh), for the band above the prompt
 // in the Desktop app: context, 5-hour and 7-day usage, each drawn as an SVG gauge beside its value.
+// The 5-hour and 7-day readings are shared with the other sessions on the machine through $.store.
 
 // The meter pattern in use: options.pattern at load, then each /config change
 let selected = 'bar';
 let context = null;
 let rateLimits = [];
+// This session's own last rate-limit reading from usage(), so a tick can tell a new one from it
+let seenUsage = '[]';
 // The redraw timer, kept so a re-fired session.start can stop it
 let ticker = null;
 
@@ -12,6 +15,9 @@ let ticker = null;
 const TICK_MS = 60_000;
 // The pattern last chosen with /meter or /config, which wins over options.pattern
 const PATTERN_KEY = 'pattern';
+// The newest rate-limit reading any session on the machine took, as { at, limits }. The limits are
+// the account's, so a session that has had no response yet shows them too
+const LIMITS_KEY = 'rateLimits';
 const DAY_MS = 24 * 3_600_000;
 const LIMITS = [
   { kind: 'five_hour', name: '5h' },
@@ -64,12 +70,22 @@ export function register(on, options) {
     if (saved in PATTERNS) selected = saved;
     const usage = await $.session.usage();
     context = usage.context;
-    rateLimits = usage.rateLimits;
-    // A session can start before any response reported the limits, and a later response need
-    // not raise session.measure for them, so each tick reads them again
+    seenUsage = JSON.stringify(usage.rateLimits);
+    // A resumed session's usage() may hold its own old reading, so the shared one wins, and the
+    // snapshot is shared only when no session has shared one
+    const shared = await sharedLimits($);
+    if (shared) rateLimits = shared;
+    else if (usage.rateLimits.length > 0) await share($, usage.rateLimits);
+    // A later response need not raise session.measure for the limits, so each tick reads this
+    // session's own again, and takes up what another session shared since
     ticker = $.clock.every(TICK_MS, async () => {
       const latest = (await $.session.usage()).rateLimits;
-      if (latest.length > 0) rateLimits = latest;
+      const seen = JSON.stringify(latest);
+      if (seen !== seenUsage) {
+        seenUsage = seen;
+        if (latest.length > 0) await share($, latest);
+      }
+      rateLimits = (await sharedLimits($)) ?? rateLimits;
       $.ui.invalidate('ui.render');
     });
     $.ui.invalidate('ui.render');
@@ -88,7 +104,10 @@ export function register(on, options) {
   on('session.measure', async ($, e, next) => {
     context = e.context;
     // e.rateLimits is always the latest reading; changed alone marks a window that went away
-    if (e.rateLimits.length > 0 || e.changed.includes('rateLimits')) rateLimits = e.rateLimits;
+    if (e.rateLimits.length > 0 || e.changed.includes('rateLimits')) {
+      seenUsage = JSON.stringify(e.rateLimits);
+      await share($, e.rateLimits);
+    }
     $.ui.invalidate('ui.render');
     return next(e);
   });
@@ -136,6 +155,18 @@ async function choose($, name) {
   selected = name;
   await $.store.set(PATTERN_KEY, name);
   $.ui.invalidate('ui.render');
+}
+
+// Shows a fresh reading and saves it for the other sessions. $.store has no atomic update, so the
+// last write wins, which is the newest reading as each session writes only what it just received
+async function share($, limits) {
+  rateLimits = limits;
+  await $.store.set(LIMITS_KEY, { at: await $.clock.now(), limits });
+}
+
+async function sharedLimits($) {
+  const saved = await $.store.get(LIMITS_KEY);
+  return Array.isArray(saved?.limits) ? saved.limits : null;
 }
 
 function contextMeter() {
