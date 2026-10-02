@@ -34,12 +34,13 @@ ctx 200k [ゲージ] 20% │ 5h [ゲージ] 43% ↻09:05 │ 7d [ゲージ] 5% �
 ### インストール
 
 Claude Code のプロンプトで実行します。マーケットプレイスを登録済みなら 1 行目は不要です。
-登録済みでも、status-meter が追加される前に登録した場合は先に `/plugin marketplace update sym-synergy` を実行してください。
 
 ```text
-/plugin marketplace add sym-synergy/team-messaging
-/plugin install status-meter@sym-synergy
+/plugin marketplace add sym-product-sandbox/hiraoku-claude-mods
+/plugin install status-meter@hiraoku-mods
 ```
+
+リポジトリは sym-product-sandbox の internal なので、組織のメンバーで、手元の git が GitHub に認証できている必要があります。
 
 インストールしたら Desktop アプリを再起動します。
 
@@ -63,13 +64,12 @@ Desktop アプリでは、プロンプトで `/meter` にパターン名を付�
 `/meter` だけを実行すると、選べるパターンと今のパターンを表示します。
 
 Desktop アプリで `/config` を開くと、アプリ自体の設定画面が開き、この mod の設定はありません。
-ターミナルの Claude Code では、`/config` の「Meter pattern」の行でも切り替えられます。
 
 ### 更新する
 
 ```text
-/plugin marketplace update sym-synergy
-/plugin update status-meter@sym-synergy
+/plugin marketplace update hiraoku-mods
+/plugin update status-meter@hiraoku-mods
 ```
 
 更新は Desktop アプリの再起動後に反映されます。
