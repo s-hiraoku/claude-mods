@@ -8,6 +8,8 @@ let context = null;
 let rateLimits = [];
 // The redraw timer, kept so a re-fired session.start can stop it
 let ticker = null;
+// How many times each surface asked for the band, for /meter debug
+const asks = {};
 
 // How often to redraw, so the reset markers move on and a passed reset shows 0%
 const TICK_MS = 60_000;
@@ -107,6 +109,12 @@ export function register(on, options) {
   // user switches
   on('command.run', { command: 'meter' }, async ($, e) => {
     const name = e.args.trim();
+    // Which surfaces the session draws on and which of them asked for the band, to tell an app that
+    // never asks from one that asks and does not show it
+    if (name === 'debug') {
+      const surfaces = await $.session.surfaces();
+      return { text: 'Surfaces: ' + JSON.stringify(surfaces) + ', band asks: ' + JSON.stringify(asks) };
+    }
     if (!(name in PATTERNS)) {
       return { text: 'Patterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
     }
@@ -117,6 +125,7 @@ export function register(on, options) {
   // The terminal keeps its own statusLine, so only the app surfaces get this band. A cloud session
   // has no terminal of its own: the app that attached to it draws as desktop or mobile, all with Svg
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    asks[e.surface] = (asks[e.surface] ?? 0) + 1;
     if (e.surface === 'terminal') return next(e);
     const elements = $.ui.resolve(e);
     const { Box, Text } = elements;
