@@ -62,21 +62,6 @@ test('the Desktop app shows the three meters with their values and reset markers
   expect(await ui.find({ type: 'Text', text: 'drawn by another mod' })).toBeDefined();
 });
 
-// A cloud session has no terminal: the app attached to it asks for the band as desktop or mobile
-for (const surface of ['mobile', 'vscode'] as const) {
-  test(`the ${surface} surface shows the three meters too`, async ($, on) => {
-    mock.clock(on, { now: NOW });
-    stubSession(on);
-    await $.session.start({ ...START, surface });
-
-    const ui = await $.ui.mount({ ...BAND, surface });
-    for (const text of ['ctx 200k', '20%', '43%', '↻09:05', '↻10/6']) {
-      expect(await ui.find({ type: 'Text', text }), text).toBeDefined();
-    }
-    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(3);
-  });
-}
-
 test('the terminal keeps its statusLine, so nothing of this mod is drawn there', async ($, on) => {
   mock.clock(on, { now: NOW });
   stubSession(on);

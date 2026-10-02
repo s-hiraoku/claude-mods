@@ -1,6 +1,5 @@
 // The meters line of the terminal statusline (~/.claude/statusline.sh), for the band above the prompt
-// in the apps (Desktop, mobile, VS Code), whether the session runs locally or in the cloud: context,
-// 5-hour and 7-day usage, each drawn as an SVG gauge beside its value.
+// in the Desktop app: context, 5-hour and 7-day usage, each drawn as an SVG gauge beside its value.
 
 // The meter pattern in use: options.pattern at load, then each /config change
 let selected = 'bar';
@@ -51,8 +50,7 @@ const PATTERNS = {
 };
 
 export function register(on, options) {
-  // An unset or unknown option falls back to the default pattern
-  if (options.pattern in PATTERNS) selected = options.pattern;
+  selected = options.pattern;
 
   // Fires again on an enable or a worker respawn, which may keep this module's variables
   on('session.start', async ($, e, next) => {
@@ -114,10 +112,9 @@ export function register(on, options) {
     return { text: 'Meter pattern: ' + name };
   });
 
-  // The terminal keeps its own statusLine, so only the app surfaces get this band. A cloud session
-  // has no terminal of its own: the app that attached to it draws as desktop or mobile, all with Svg
+  // The terminal keeps its own statusLine, so only the Desktop app gets this band
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.surface === 'terminal') return next(e);
+    if (e.surface !== 'desktop') return next(e);
     const elements = $.ui.resolve(e);
     const { Box, Text } = elements;
     const now = await $.clock.now();
