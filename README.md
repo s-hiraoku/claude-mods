@@ -9,6 +9,23 @@ hiraoku の個人用 Claude Code mod 集です。
 | --- | --- |
 | [status-meter](plugins/status-meter/README.md) | Desktop アプリの入力欄の上に、コンテキスト・5 時間制限・7 日制限の使用率を SVG メーターで表示する。形は `/meter` で 5 パターンから選べる |
 
+## 動作する場所
+
+mod の hooks はどこでも動きますが、mod が描いたもの（入力欄の上の帯やペイン）が表示されるのは、ターミナルと Desktop アプリの Code タブ（ローカルのセッション）だけです（[Mods overview の「Where mods run」](https://code.claude.com/docs/en/plugins/mods/overview#where-mods-run)）。
+
+| Claude Code を動かす場所 | hooks | 描いたものの表示 |
+| --- | --- | --- |
+| ターミナルの `claude` | 動く | 表示される |
+| Desktop アプリの Code タブ（ローカルのセッション） | 動く | 表示される |
+| VS Code の拡張機能のチャット | 動く | 表示されない |
+| `claude -p` と Agent SDK | 動く | 表示されない |
+| Remote Control（claude.ai やスマホのアプリから） | 手元のマシンのセッションで動く | 手元のマシンのターミナルにだけ表示される |
+| クラウドのセッション（claude.ai/code など） | プラグインがセッションに入っていれば動く | 表示されない |
+
+クラウドのセッションには、リポジトリの `.claude/settings.json` に書いたマーケットプレイスとプラグイン（`extraKnownMarketplaces` と `enabledPlugins`）はインストールされません（[Configure cloud environments の「What carries over from your setup」](https://code.claude.com/docs/en/cloud-environments#what-carries-over-from-your-setup)）。
+環境のセットアップスクリプトで `claude plugin marketplace add` と `claude plugin install` を実行すれば入りますが、描いたものは表示されず、mod が登録したコマンド（`/meter` など）もアプリからは使えませんでした。
+status-meter のように画面に描く mod は、ローカルのセッションで使ってください。
+
 ## インストール
 
 Claude Code のプロンプトで実行します。
@@ -47,6 +64,23 @@ The repository is itself a plugin marketplace named `hiraoku-mods`.
 | Mod | What it does |
 | --- | --- |
 | [status-meter](plugins/status-meter/README.md) | Shows context, 5-hour and 7-day limit usage as SVG meters above the prompt in the Desktop app. Pick one of five patterns with `/meter`. |
+
+## Where mods work
+
+A mod's hooks run everywhere, but what it draws (the band above the prompt, panes) appears only in the terminal and in the Desktop app's Code tab with a local session ([Mods overview, "Where mods run"](https://code.claude.com/docs/en/plugins/mods/overview#where-mods-run)).
+
+| Where you run Claude Code | Hooks | What the mod draws |
+| --- | --- | --- |
+| `claude` in a terminal | Run | Appears |
+| The Desktop app's Code tab (local session) | Run | Appears |
+| The VS Code extension's chat panel | Run | Does not appear |
+| `claude -p` and the Agent SDK | Run | Does not appear |
+| Remote Control from claude.ai or the mobile app | Run in the session on your machine | Appears only in the terminal on your machine |
+| A cloud session (claude.ai/code and others) | Run when the plugin is installed in the session | Does not appear |
+
+A cloud session does not install the marketplaces and plugins declared in the repository's `.claude/settings.json` (`extraKnownMarketplaces` and `enabledPlugins`) ([Configure cloud environments, "What carries over from your setup"](https://code.claude.com/docs/en/cloud-environments#what-carries-over-from-your-setup)).
+Running `claude plugin marketplace add` and `claude plugin install` in the environment's setup script installs them, but what a mod draws still does not appear, and the app did not accept a command a mod registers (such as `/meter`).
+Use a mod that draws, such as status-meter, in a local session.
 
 ## Install
 

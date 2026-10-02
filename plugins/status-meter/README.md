@@ -77,7 +77,7 @@ Desktop アプリで `/config` を開くと、アプリ自体の設定画面が�
 ## 制約
 
 - **Desktop アプリだけで表示します**。ターミナルでは何も描かず、これまでどおり statusLine が表示されます
-- **Desktop では Local 環境のセッションが必要です**。動作を確認したのは Local 環境で始めたセッションだけです
+- **Desktop では Local 環境のセッションが必要です**。クラウドのセッション（claude.ai/code、Desktop アプリの Cloud 環境、スマホのアプリなど）では表示できません。mod が描いたものはクラウドのセッションでは表示されないという、Claude Code の仕様です（[Mods overview の「Where mods run」](https://code.claude.com/docs/en/plugins/mods/overview#where-mods-run)）。セットアップスクリプトでインストールすれば mod 自体は読み込まれますが、帯は描かれず、`/meter` もアプリから使えません。詳しくは[リポジトリの README](../../README.md#動作する場所) を見てください
 - **新しいセッションでは、最初の応答まで 5h と 7d は `—` です**。制限の値は API の応答と一緒に届くためです。セッションの間で値を共有する仕組み（`$.store`）は入れていません
 
 動作を確認したバージョン:
