@@ -1,0 +1,15 @@
+{
+  "name": "status-meter",
+  "version": "0.1.0",
+  "description": "Shows context, 5-hour and 7-day limit usage as SVG meters above the prompt in the Desktop app",
+  "author": { "name": "hiraoku.shinichi" },
+  "userConfig": {
+    "pattern": {
+      "type": "string",
+      "title": "Meter pattern",
+      "description": "How the context, 5-hour and 7-day meters are drawn: ring, dots, sparkline, bar or braille",
+      "options": ["ring", "dots", "sparkline", "bar", "braille"],
+      "default": "bar"
+    }
+  }
+}

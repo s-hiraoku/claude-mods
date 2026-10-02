@@ -1,0 +1,14 @@
+{
+  "name": "hiraoku-mods",
+  "owner": {
+    "name": "hiraoku.shinichi"
+  },
+  "description": "hiraoku の個人用 Claude Code mod 集",
+  "plugins": [
+    {
+      "name": "status-meter",
+      "source": "./plugins/status-meter",
+      "description": "Desktop アプリの入力欄の上に、コンテキスト・5 時間制限・7 日制限の使用率を SVG メーターで表示する mod"
+    }
+  ]
+}
