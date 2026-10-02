@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "hiraoku-mods": {
+      "source": { "source": "github", "repo": "s-hiraoku/claude-mods" }
+    }
+  },
+  "enabledPlugins": {
+    "status-meter@hiraoku-mods": true
+  }
+}
