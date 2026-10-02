@@ -1,6 +1,6 @@
 // The meters line of the terminal statusline (~/.claude/statusline.sh), for the band above the prompt
-// in the apps (Desktop, mobile, VS Code), whether the session runs locally or in the cloud: context,
-// 5-hour and 7-day usage, each drawn as an SVG gauge beside its value.
+// in the Desktop app: context, 5-hour and 7-day usage, each drawn as an SVG gauge beside its value.
+// An app attached to a cloud session never asks for the band, so /meter also prints the line as text.
 
 // The meter pattern in use: options.pattern at load, then each /config change
 let selected = 'bar';
@@ -116,21 +116,23 @@ export function register(on, options) {
       return { text: 'Surfaces: ' + JSON.stringify(surfaces) + ', band asks: ' + JSON.stringify(asks) };
     }
     if (!(name in PATTERNS)) {
-      return { text: 'Patterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
+      const line = textLine(await $.clock.now());
+      return { text: line + '\nPatterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
     }
     await choose($, name);
     return { text: 'Meter pattern: ' + name };
   });
 
-  // The terminal keeps its own statusLine, so only the app surfaces get this band. A cloud session
-  // has no terminal of its own: the app that attached to it draws as desktop or mobile, all with Svg
+  // The terminal keeps its own statusLine, so only the app surfaces get this band. Only an app that
+  // runs the session itself (Desktop's Local sessions) asks for it; one attached to a cloud session
+  // sends no ui_render, so this hook never runs there and /meter is the way to see the figures
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     asks[e.surface] = (asks[e.surface] ?? 0) + 1;
     if (e.surface === 'terminal') return next(e);
     const elements = $.ui.resolve(e);
     const { Box, Text } = elements;
     const now = await $.clock.now();
-    const meters = [contextMeter(), ...LIMITS.map((limit) => limitMeter(limit, now))];
+    const meters = allMeters(now);
     // The statusline's dim separator between meters
     const children = meters.flatMap((m, i) => [
       ...(i === 0 ? [] : [Text({ dimColor: true, children: ['│'] })]),
@@ -148,6 +150,32 @@ async function choose($, name) {
   selected = name;
   await $.store.set(PATTERN_KEY, name);
   $.ui.invalidate('ui.render');
+}
+
+function allMeters(now) {
+  return [contextMeter(), ...LIMITS.map((limit) => limitMeter(limit, now))];
+}
+
+// The band as one line of text, for an app that does not draw the band: a ten-cell block bar per meter
+function textLine(now) {
+  return allMeters(now)
+    .map(({ label, used, marker }) => {
+      const known = typeof used === 'number';
+      const parts = [label, textBar(known ? used : 0), known ? Math.round(used) + '%' : '—'];
+      if (marker) parts.push(marker);
+      return parts.join(' ');
+    })
+    .join(' │ ');
+}
+
+// Eighths of a cell, so the last lit cell fills in part as the SVG bar's does
+const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
+
+function textBar(used) {
+  const eighths = Math.round(Math.min(Math.max(used, 0), 100) * 0.8);
+  const full = Math.floor(eighths / 8);
+  const part = EIGHTHS[eighths % 8];
+  return '█'.repeat(full) + part + '░'.repeat(10 - full - (part ? 1 : 0));
 }
 
 function contextMeter() {

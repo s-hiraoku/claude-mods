@@ -62,7 +62,7 @@ test('the Desktop app shows the three meters with their values and reset markers
   expect(await ui.find({ type: 'Text', text: 'drawn by another mod' })).toBeDefined();
 });
 
-// A cloud session has no terminal: the app attached to it asks for the band as desktop or mobile
+// Any app surface that asks for the band gets the meters, not the Desktop app alone
 for (const surface of ['mobile', 'vscode'] as const) {
   test(`the ${surface} surface shows the three meters too`, async ($, on) => {
     mock.clock(on, { now: NOW });
@@ -152,8 +152,23 @@ test('/meter switches the pattern, the next session starts with it, and anything
   expect(await widths()).toEqual([12, 12, 12]);
   expect(store.get('pattern')).toBe('ring');
 
-  expect((await meter('pie')).text).toBe('Patterns: ring, dots, sparkline, bar, braille (now: ring)');
+  expect((await meter('pie')).text).toBe(
+    'ctx 200k ██░░░░░░░░ 20% │ 5h ████▎░░░░░ 43% ↻09:05 │ 7d ▌░░░░░░░░░ 5% ↻10/6\n' +
+      'Patterns: ring, dots, sparkline, bar, braille (now: ring)',
+  );
   expect(store.get('pattern')).toBe('ring');
+});
+
+// An app attached to a cloud session never asks for the band, so /meter alone prints the figures
+test('/meter alone prints the meters as text, a dash before the first reading', async ($, on) => {
+  mock.clock(on, { now: NOW });
+  stubSession(on, []);
+  await $.session.start(START);
+  const meter = (args: string) => $.command.run({ command: 'meter', args, origin: { kind: 'composer' }, presentation: PRESENTATION });
+
+  expect((await meter('')).text).toBe(
+    'ctx 200k ██░░░░░░░░ 20% │ 5h ░░░░░░░░░░ — │ 7d ░░░░░░░░░░ —\n' + 'Patterns: ring, dots, sparkline, bar, braille (now: bar)',
+  );
 });
 
 test('a session starts with the pattern saved in the store over options.pattern', { options: { pattern: 'dots' } }, async ($, on) => {
