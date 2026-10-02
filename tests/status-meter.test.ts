@@ -108,11 +108,11 @@ test('/config switches the pattern live, unless the change was denied', async ($
   on('config.set', ($, e) => (deny ? { deny: 'locked' } : { value: e.value }));
   await $.session.start(START);
   const change = (key: string, value: string) =>
-    $.config.set({ key, value, previous: 'ring', provider: { plugin: 'status-meter', tier: 'user' }, origin: { kind: 'composer' } });
+    $.config.set({ key, value, previous: 'bar', provider: { plugin: 'status-meter', tier: 'user' }, origin: { kind: 'composer' } });
 
   const ui = await $.ui.mount(DESKTOP);
   const widths = async () => (await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.width);
-  expect(await widths()).toEqual([12, 12, 12]);
+  expect(await widths()).toEqual([59, 59, 59]);
 
   await change('status-meter.pattern', 'braille');
   expect(await widths()).toEqual([30, 30, 30]);
@@ -133,12 +133,12 @@ test('/meter switches the pattern, the next session starts with it, and anything
   const widths = async () => (await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.width);
   const meter = (args: string) => $.command.run({ command: 'meter', args, origin: { kind: 'composer' }, presentation: PRESENTATION });
 
-  expect((await meter(' bar ')).text).toBe('Meter pattern: bar');
-  expect(await widths()).toEqual([59, 59, 59]);
-  expect(store.get('pattern')).toBe('bar');
+  expect((await meter(' ring ')).text).toBe('Meter pattern: ring');
+  expect(await widths()).toEqual([12, 12, 12]);
+  expect(store.get('pattern')).toBe('ring');
 
-  expect((await meter('pie')).text).toBe('Patterns: ring, dots, sparkline, bar, braille (now: bar)');
-  expect(store.get('pattern')).toBe('bar');
+  expect((await meter('pie')).text).toBe('Patterns: ring, dots, sparkline, bar, braille (now: ring)');
+  expect(store.get('pattern')).toBe('ring');
 });
 
 test('a session starts with the pattern saved in the store over options.pattern', { options: { pattern: 'dots' } }, async ($, on) => {

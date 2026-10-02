@@ -2,7 +2,7 @@
 // in the Desktop app: context, 5-hour and 7-day usage, each drawn as an SVG gauge beside its value.
 
 // The meter pattern in use: options.pattern at load, then each /config change
-let selected = 'ring';
+let selected = 'bar';
 let context = null;
 let rateLimits = [];
 // The redraw timer, kept so a re-fired session.start can stop it

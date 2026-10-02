@@ -9,7 +9,7 @@
       "title": "Meter pattern",
       "description": "How the context, 5-hour and 7-day meters are drawn: ring, dots, sparkline, bar or braille",
       "options": ["ring", "dots", "sparkline", "bar", "braille"],
-      "default": "ring"
+      "default": "bar"
     }
   }
 }
