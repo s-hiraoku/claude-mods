@@ -2,9 +2,13 @@
   "extraKnownMarketplaces": {
     "hiraoku-mods": {
       "source": { "source": "github", "repo": "s-hiraoku/claude-mods" }
+    },
+    "open-pstack": {
+      "source": { "source": "github", "repo": "ericlitman/open-pstack" }
     }
   },
   "enabledPlugins": {
-    "status-meter@hiraoku-mods": true
+    "status-meter@hiraoku-mods": true,
+    "pstack@open-pstack": true
   }
 }
