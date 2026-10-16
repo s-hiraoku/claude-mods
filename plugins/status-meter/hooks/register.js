@@ -1,11 +1,13 @@
 // The meters line of the terminal statusline (~/.claude/statusline.sh), for the band above the prompt
 // in the Desktop app: context, 5-hour and 7-day usage, each drawn as an SVG gauge beside its value.
-// An app attached to a cloud session never asks for the band, so /meter also prints the line as text.
+// The 5-hour and 7-day readings are shared with the other sessions on the machine through $.store.
 
 // The meter pattern in use: options.pattern at load, then each /config change
 let selected = 'bar';
 let context = null;
 let rateLimits = [];
+// This session's own last rate-limit reading from usage(), so a tick can tell a new one from it
+let seenUsage = '[]';
 // The redraw timer, kept so a re-fired session.start can stop it
 let ticker = null;
 
@@ -13,6 +15,9 @@ let ticker = null;
 const TICK_MS = 60_000;
 // The pattern last chosen with /meter or /config, which wins over options.pattern
 const PATTERN_KEY = 'pattern';
+// The newest rate-limit reading any session on the machine took, as { at, limits }. The limits are
+// the account's, so a session that has had no response yet shows them too
+const LIMITS_KEY = 'rateLimits';
 const DAY_MS = 24 * 3_600_000;
 const LIMITS = [
   { kind: 'five_hour', name: '5h' },
@@ -51,8 +56,7 @@ const PATTERNS = {
 };
 
 export function register(on, options) {
-  // An unset or unknown option falls back to the default pattern
-  if (options.pattern in PATTERNS) selected = options.pattern;
+  selected = options.pattern;
 
   // Fires again on an enable or a worker respawn, which may keep this module's variables
   on('session.start', async ($, e, next) => {
@@ -66,12 +70,22 @@ export function register(on, options) {
     if (saved in PATTERNS) selected = saved;
     const usage = await $.session.usage();
     context = usage.context;
-    rateLimits = usage.rateLimits;
-    // A session can start before any response reported the limits, and a later response need
-    // not raise session.measure for them, so each tick reads them again
+    seenUsage = JSON.stringify(usage.rateLimits);
+    // A resumed session's usage() may hold its own old reading, so the shared one wins, and the
+    // snapshot is shared only when no session has shared one
+    const shared = await sharedLimits($);
+    if (shared) rateLimits = shared;
+    else if (usage.rateLimits.length > 0) await share($, usage.rateLimits);
+    // A later response need not raise session.measure for the limits, so each tick reads this
+    // session's own again, and takes up what another session shared since
     ticker = $.clock.every(TICK_MS, async () => {
       const latest = (await $.session.usage()).rateLimits;
-      if (latest.length > 0) rateLimits = latest;
+      const seen = JSON.stringify(latest);
+      if (seen !== seenUsage) {
+        seenUsage = seen;
+        if (latest.length > 0) await share($, latest);
+      }
+      rateLimits = (await sharedLimits($)) ?? rateLimits;
       $.ui.invalidate('ui.render');
     });
     $.ui.invalidate('ui.render');
@@ -90,7 +104,10 @@ export function register(on, options) {
   on('session.measure', async ($, e, next) => {
     context = e.context;
     // e.rateLimits is always the latest reading; changed alone marks a window that went away
-    if (e.rateLimits.length > 0 || e.changed.includes('rateLimits')) rateLimits = e.rateLimits;
+    if (e.rateLimits.length > 0 || e.changed.includes('rateLimits')) {
+      seenUsage = JSON.stringify(e.rateLimits);
+      await share($, e.rateLimits);
+    }
     $.ui.invalidate('ui.render');
     return next(e);
   });
@@ -108,22 +125,19 @@ export function register(on, options) {
   on('command.run', { command: 'meter' }, async ($, e) => {
     const name = e.args.trim();
     if (!(name in PATTERNS)) {
-      const line = textLine(await $.clock.now());
-      return { text: line + '\nPatterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
+      return { text: 'Patterns: ' + Object.keys(PATTERNS).join(', ') + ' (now: ' + selected + ')' };
     }
     await choose($, name);
     return { text: 'Meter pattern: ' + name };
   });
 
-  // The terminal keeps its own statusLine, so only the app surfaces get this band. Only an app that
-  // runs the session itself (Desktop's Local sessions) asks for it; one attached to a cloud session
-  // sends no ui_render, so this hook never runs there and /meter is the way to see the figures
+  // The terminal keeps its own statusLine, so only the Desktop app gets this band
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.surface === 'terminal') return next(e);
+    if (e.surface !== 'desktop') return next(e);
     const elements = $.ui.resolve(e);
     const { Box, Text } = elements;
     const now = await $.clock.now();
-    const meters = allMeters(now);
+    const meters = [contextMeter(), ...LIMITS.map((limit) => limitMeter(limit, now))];
     // The statusline's dim separator between meters
     const children = meters.flatMap((m, i) => [
       ...(i === 0 ? [] : [Text({ dimColor: true, children: ['│'] })]),
@@ -143,30 +157,16 @@ async function choose($, name) {
   $.ui.invalidate('ui.render');
 }
 
-function allMeters(now) {
-  return [contextMeter(), ...LIMITS.map((limit) => limitMeter(limit, now))];
+// Shows a fresh reading and saves it for the other sessions. $.store has no atomic update, so the
+// last write wins, which is the newest reading as each session writes only what it just received
+async function share($, limits) {
+  rateLimits = limits;
+  await $.store.set(LIMITS_KEY, { at: await $.clock.now(), limits });
 }
 
-// The band as one line of text, for an app that does not draw the band: a ten-cell block bar per meter
-function textLine(now) {
-  return allMeters(now)
-    .map(({ label, used, marker }) => {
-      const known = typeof used === 'number';
-      const parts = [label, textBar(known ? used : 0), known ? Math.round(used) + '%' : '—'];
-      if (marker) parts.push(marker);
-      return parts.join(' ');
-    })
-    .join(' │ ');
-}
-
-// Eighths of a cell, so the last lit cell fills in part as the SVG bar's does
-const EIGHTHS = ['', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
-
-function textBar(used) {
-  const eighths = Math.round(Math.min(Math.max(used, 0), 100) * 0.8);
-  const full = Math.floor(eighths / 8);
-  const part = EIGHTHS[eighths % 8];
-  return '█'.repeat(full) + part + '░'.repeat(10 - full - (part ? 1 : 0));
+async function sharedLimits($) {
+  const saved = await $.store.get(LIMITS_KEY);
+  return Array.isArray(saved?.limits) ? saved.limits : null;
 }
 
 function contextMeter() {

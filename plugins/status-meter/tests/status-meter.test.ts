@@ -62,21 +62,6 @@ test('the Desktop app shows the three meters with their values and reset markers
   expect(await ui.find({ type: 'Text', text: 'drawn by another mod' })).toBeDefined();
 });
 
-// Any app surface that asks for the band gets the meters, not the Desktop app alone
-for (const surface of ['mobile', 'vscode'] as const) {
-  test(`the ${surface} surface shows the three meters too`, async ($, on) => {
-    mock.clock(on, { now: NOW });
-    stubSession(on);
-    await $.session.start({ ...START, surface });
-
-    const ui = await $.ui.mount({ ...BAND, surface });
-    for (const text of ['ctx 200k', '20%', '43%', '↻09:05', '↻10/6']) {
-      expect(await ui.find({ type: 'Text', text }), text).toBeDefined();
-    }
-    expect(await ui.findAll({ type: 'Svg' })).toHaveLength(3);
-  });
-}
-
 test('the terminal keeps its statusLine, so nothing of this mod is drawn there', async ($, on) => {
   mock.clock(on, { now: NOW });
   stubSession(on);
@@ -152,23 +137,8 @@ test('/meter switches the pattern, the next session starts with it, and anything
   expect(await widths()).toEqual([12, 12, 12]);
   expect(store.get('pattern')).toBe('ring');
 
-  expect((await meter('pie')).text).toBe(
-    'ctx 200k ██░░░░░░░░ 20% │ 5h ████▎░░░░░ 43% ↻09:05 │ 7d ▌░░░░░░░░░ 5% ↻10/6\n' +
-      'Patterns: ring, dots, sparkline, bar, braille (now: ring)',
-  );
+  expect((await meter('pie')).text).toBe('Patterns: ring, dots, sparkline, bar, braille (now: ring)');
   expect(store.get('pattern')).toBe('ring');
-});
-
-// An app attached to a cloud session never asks for the band, so /meter alone prints the figures
-test('/meter alone prints the meters as text, a dash before the first reading', async ($, on) => {
-  mock.clock(on, { now: NOW });
-  stubSession(on, []);
-  await $.session.start(START);
-  const meter = (args: string) => $.command.run({ command: 'meter', args, origin: { kind: 'composer' }, presentation: PRESENTATION });
-
-  expect((await meter('')).text).toBe(
-    'ctx 200k ██░░░░░░░░ 20% │ 5h ░░░░░░░░░░ — │ 7d ░░░░░░░░░░ —\n' + 'Patterns: ring, dots, sparkline, bar, braille (now: bar)',
-  );
 });
 
 test('a session starts with the pattern saved in the store over options.pattern', { options: { pattern: 'dots' } }, async ($, on) => {
@@ -234,6 +204,47 @@ test('limits that arrive without a rateLimits change, or only in usage(), still 
   reported.push({ ...LIMITS[0]!, percentUsed: 60 }, LIMITS[1]!);
   await clock.advance(60_000);
   expect(await alts()).toEqual(['ctx 200k 20%', '5h 60%', '7d 5%']);
+});
+
+test('a session with no reading yet shows the limits another session shared', async ($, on) => {
+  mock.clock(on, { now: NOW });
+  stubSession(on, [], () => CONTEXT, new Map([['rateLimits', { at: NOW - 60_000, limits: LIMITS }]]));
+  await $.session.start(START);
+
+  const ui = await $.ui.mount(DESKTOP);
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual(['ctx 200k 20%', '5h 43%', '7d 5%']);
+});
+
+test('a new reading is shared, and a tick takes up a newer one another session shared', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW });
+  const store = new Map<string, unknown>();
+  stubSession(on, [], () => CONTEXT, store);
+  on('session.measure', ($, e) => ({ changed: e.changed }));
+  await $.session.start(START);
+  const ui = await $.ui.mount(DESKTOP);
+  const alts = async () => (await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt);
+
+  await $.session.measure({ context: CONTEXT, rateLimits: LIMITS, changed: ['rateLimits'] });
+  expect(store.get('rateLimits')).toEqual({ at: NOW, limits: LIMITS });
+
+  const other = [{ ...LIMITS[0]!, percentUsed: 70 }, { ...LIMITS[1]!, percentUsed: 9 }];
+  store.set('rateLimits', { at: NOW + 30_000, limits: other });
+  await clock.advance(60_000);
+  expect(await alts()).toEqual(['ctx 200k 20%', '5h 70%', '7d 9%']);
+});
+
+test('a resumed session shows the shared reading over its own old one, and leaves it in place', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW });
+  const old = [{ ...LIMITS[0]!, percentUsed: 10 }, { ...LIMITS[1]!, percentUsed: 1 }];
+  const shared = { at: NOW - 60_000, limits: LIMITS };
+  const store = new Map<string, unknown>([['rateLimits', shared]]);
+  stubSession(on, old, () => CONTEXT, store);
+  await $.session.start(START);
+  const ui = await $.ui.mount(DESKTOP);
+
+  await clock.advance(60_000);
+  expect((await ui.findAll({ type: 'Svg' })).map((svg) => svg.props.alt)).toEqual(['ctx 200k 20%', '5h 43%', '7d 5%']);
+  expect(store.get('rateLimits')).toBe(shared);
 });
 
 test('/clear shows the emptied context before the next turn', async ($, on) => {
