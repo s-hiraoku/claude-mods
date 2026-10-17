@@ -37,6 +37,23 @@ Claude Code のプロンプトで実行します。
 
 このリポジトリは sym-product-sandbox の internal です。組織のメンバーで、手元の git が GitHub に認証できている必要があります。
 
+## 併用している外部プラグイン
+
+`.claude/settings.json` で次も有効にしています。このリポジトリを開いた Claude Code（ローカル、クラウドとも）で、信頼を確認したあとに自動で入ります。
+
+| プラグイン | 内容 |
+| --- | --- |
+| [pstack@open-pstack](https://github.com/ericlitman/open-pstack) | Cursor の pstack（Lauren Tan 作）を Claude Code 向けにした非公式版。`/pstack:setup-pstack` で初期設定し、`/pstack:poteto-mode <タスク>` で使う |
+
+他のリポジトリでも使うには、ローカルの Claude Code で次を実行します。
+
+```text
+/plugin marketplace add ericlitman/open-pstack
+/plugin install pstack@open-pstack
+```
+
+クラウドでは bun は使えますが、Grok CLI は動きません（サンドボックスの制約）。3 モデルのレビューは Claude と Codex の 2 モデルになります。
+
 ## 更新
 
 ```text
